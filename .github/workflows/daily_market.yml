@@ -79,7 +79,6 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_SEND_TO_CHAT_ID: ${{ secrets.TELEGRAM_SEND_TO_CHAT_ID }}
         run: |
           echo "설정 검증 중..."
 
@@ -93,20 +92,15 @@ jobs:
             exit 1
           fi
 
-          if [ -z "$TELEGRAM_SEND_TO_CHAT_ID" ]; then
-            echo "❌ TELEGRAM_SEND_TO_CHAT_ID가 설정되지 않았습니다"
-            exit 1
-          fi
-
           echo "✅ 필수 설정 확인 완료"
 
       - name: 마감시황 전송 실행
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_SEND_TO_CHAT_ID: ${{ secrets.TELEGRAM_SEND_TO_CHAT_ID }}
-          TELEGRAM_CHANNEL_USERNAME: ${{ secrets.TELEGRAM_CHANNEL_USERNAME }}
-          BRIEFING_MARKET_WRAP_URL: ${{ secrets.BRIEFING_MARKET_WRAP_URL }}
+          TELEGRAM_SEND_TO_CHAT_ID: "-1002524208934"
+          TELEGRAM_CHANNEL_USERNAME: "shmstory"
+          BRIEFING_MARKET_WRAP_URL: ""
           USE_DETAILED_FORMAT: ${{ github.event.inputs.use_detailed || 'false' }}
         run: |
           echo "📈 미국 마감시황 전송 시작"
