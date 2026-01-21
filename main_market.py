@@ -87,7 +87,7 @@ def load_config():
 
     # 기본값 설정
     settings.setdefault('USE_DETAILED_FORMAT', False)
-    settings.setdefault('GEMINI_MODEL', 'gemini-1.5-flash')
+    settings.setdefault('GEMINI_MODEL', 'gemini-2.0-flash')
     settings.setdefault('LOG_LEVEL', 'INFO')
 
     return settings
