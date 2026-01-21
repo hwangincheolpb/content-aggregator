@@ -42,7 +42,7 @@ USE_DETAILED_FORMAT = False
 # Gemini 모델 선택
 # 권장: "gemini-1.5-flash" (빠름, 저렴)
 # 대안: "gemini-1.5-pro" (더 정확, 비용 증가)
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.0-flash"
 
 # ============================================================
 # 로깅 설정
