@@ -1,0 +1,43 @@
+# Content Sources Configuration
+# Customize this file to add your own sources
+
+# How many hours back to collect content (default: 24)
+hours_back: 24
+
+# RSS Feeds
+rss_feeds:
+  - https://hnrss.org/newest  # Hacker News
+  - https://www.reddit.com/r/programming/.rss  # Reddit r/programming
+  # Add your favorite RSS feeds here
+  # - https://example.com/feed.xml
+
+# Twitter/X Usernames (without @)
+twitter_users:
+  # - elonmusk
+  # - openai
+  # - sama
+  # Add Twitter usernames you want to follow
+
+# Reddit Subreddits (without r/)
+reddit_subreddits:
+  - programming
+  - machinelearning
+  # - python
+  # - webdev
+  # Add subreddits you want to monitor
+
+# Telegram Channels
+telegram_channels:
+  # - durov
+  # - telegram
+  # Add public Telegram channels (requires API credentials)
+
+# Notification Settings
+notifications:
+  email:
+    enabled: true  # Send summary via email
+  telegram:
+    enabled: false  # Send summary via Telegram bot
+  save_to_file:
+    enabled: true  # Save summary to file
+    path: data/summaries  # Where to save summaries
