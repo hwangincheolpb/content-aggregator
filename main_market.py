@@ -87,7 +87,7 @@ def load_config():
 
     # 기본값 설정
     settings.setdefault('USE_DETAILED_FORMAT', False)
-    settings.setdefault('GEMINI_MODEL', 'gemini-2.0-flash')
+    settings.setdefault('GEMINI_MODEL', 'gemini-pro')
     settings.setdefault('LOG_LEVEL', 'INFO')
 
     return settings
@@ -197,7 +197,7 @@ def summarize_market_data(market_data: str, config: dict) -> Optional[str]:
 
         summarizer = GeminiSummarizer(
             api_key=config['GEMINI_API_KEY'],
-            model_name=config.get('GEMINI_MODEL', 'gemini-2.0-flash')
+            model_name=config.get('GEMINI_MODEL', 'gemini-pro')
         )
 
         use_detailed = config.get('USE_DETAILED_FORMAT', False)
