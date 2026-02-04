@@ -172,38 +172,132 @@ class TelegramChannelCollector:
             logger.error(f"텔레그램 채널 수집 중 오류: {e}")
             return []
 
-    def get_market_summary_messages(self, keywords: Optional[List[str]] = None) -> List[str]:
+    def get_market_summary_messages(self, market_type: str = "us") -> List[str]:
         """
         시황 관련 메시지만 필터링하여 가져오기
 
         Args:
-            keywords: 필터링할 키워드 목록 (기본: 시황 관련 키워드)
+            market_type: "us" (미국 시황) 또는 "kr" (한국 시황) 또는 "all" (전체)
 
         Returns:
             시황 관련 메시지 목록
         """
-        if keywords is None:
-            keywords = [
-                '시황', '마감', '지수', 'S&P', 'NASDAQ', '나스닥',
-                '다우', 'DOW', '금리', '환율', '원자재', '유가',
-                '달러', '엔화', '금값', 'VIX'
-            ]
-
         try:
             messages = self.get_recent_messages(count=20)
 
+            if market_type == "all":
+                # YouTube 링크만 제외
+                filtered = [msg for msg in messages if 'youtu.be' not in msg]
+                logger.info(f"전체 시황 메시지 {len(filtered)}개 필터링됨")
+                return filtered
+
             filtered = []
             for msg in messages:
-                # 키워드 중 하나라도 포함되면 추가
-                if any(keyword.lower() in msg.lower() for keyword in keywords):
+                msg_type = self._classify_message(msg)
+                if msg_type == market_type:
                     filtered.append(msg)
 
-            logger.info(f"시황 관련 메시지 {len(filtered)}개 필터링됨")
+            logger.info(f"{market_type.upper()} 시황 메시지 {len(filtered)}개 필터링됨")
             return filtered
 
         except Exception as e:
             logger.error(f"메시지 필터링 중 오류: {e}")
             return []
+
+    def _classify_message(self, msg: str) -> str:
+        """
+        메시지 유형 분류
+
+        Args:
+            msg: 메시지 텍스트
+
+        Returns:
+            "us" (미국 시황), "kr" (한국 시황), "video" (방송), "other" (기타)
+        """
+        # YouTube 링크 = 방송
+        if 'youtu.be' in msg or 'youtube.com' in msg:
+            return "video"
+
+        # 미국 시황 특징
+        us_indicators = [
+            '◎ 해외 증시',
+            '◎ 주요 지표',
+            '달러인덱스',
+            '변동성지수',
+            'MSCI 한국지수',
+            '야간선물',
+            '◎ 전망과 전략',
+            'S&P500',
+            '나스닥',
+            '다우',
+        ]
+
+        # 미국 기업들
+        us_companies = [
+            'Microsoft', 'Apple', 'Tesla', 'Meta', 'NVIDIA', 'Amazon', 'Google',
+            '마이크로소프트', '애플', '테슬라', '메타', '엔비디아', '아마존',
+            'IBM', 'AMD', 'Intel', '퍼스트솔라', '캐터필러'
+        ]
+
+        # 한국 시황 특징
+        kr_indicators = [
+            '마감 시황',
+            '장초반',
+            '장중',
+            '코스피',
+            '코스닥',
+            '외국인',
+            '기관',
+            '개인 투자자',
+            '순매수',
+            '순매도',
+        ]
+
+        # 한국 기업/업종
+        kr_companies = [
+            '삼성전자', 'SK하이닉스', '현대차', '네이버', '카카오',
+            '이차전지', '2차전지', '배터리', '반도체',
+        ]
+
+        # 점수 계산
+        us_score = 0
+        kr_score = 0
+
+        for indicator in us_indicators:
+            if indicator in msg:
+                us_score += 2
+
+        for company in us_companies:
+            if company in msg:
+                us_score += 1
+
+        for indicator in kr_indicators:
+            if indicator in msg:
+                kr_score += 2
+
+        for company in kr_companies:
+            if company in msg:
+                kr_score += 1
+
+        # 분류
+        if us_score > kr_score and us_score >= 3:
+            return "us"
+        elif kr_score > us_score and kr_score >= 3:
+            return "kr"
+        elif us_score >= 3:
+            return "us"
+        elif kr_score >= 3:
+            return "kr"
+        else:
+            return "other"
+
+    def get_us_market_messages(self) -> List[str]:
+        """미국 시황 메시지만 가져오기"""
+        return self.get_market_summary_messages(market_type="us")
+
+    def get_kr_market_messages(self) -> List[str]:
+        """한국 시황 메시지만 가져오기"""
+        return self.get_market_summary_messages(market_type="kr")
 
 
 def test_telegram_channel_collector():

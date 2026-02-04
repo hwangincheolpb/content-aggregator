@@ -1,6 +1,6 @@
 """Gemini API를 이용한 시황 요약 모듈"""
 import time
-from typing import Optional
+from typing import Optional, Dict
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,91 +24,38 @@ class GeminiSummarizer:
         self.max_retries = 3
         self.retry_delay = 2
 
-        # 프롬프트 템플릿 (간결 버전)
-        self.prompt_template = """당신은 신한투자증권 서울금융센터 황인철 PB의 '전용 시황 비서'입니다.
-아래 시황 데이터를 바탕으로 고객에게 발송할 아침 시황 요약을 작성해주세요.
+        # 프롬프트: 핵심 요약만 생성 (지수/매크로는 별도 삽입)
+        self.analysis_prompt = """당신은 증권사 PB의 시황 비서입니다.
+아래 시황 데이터에서 **핵심 이슈 3가지**와 **KOSPI 전망**만 추출해주세요.
 
-📌 양식 (반드시 준수):
+📌 출력 양식 (정확히 준수):
 
 📊 핵심 요약
-- (첫 번째 핵심 이슈)
-- (두 번째 핵심 이슈)
-- (세 번째 핵심 이슈)
+- (첫 번째 핵심 이슈 - 한 문장)
+- (두 번째 핵심 이슈 - 한 문장)
+- (세 번째 핵심 이슈 - 한 문장)
 
-📈 주요 지수
-• 다우: (종가) (등락률%)
-• 나스닥: (종가) (등락률%)
-• S&P 500: (종가) (등락률%)
-• KOSPI 예상: (방향성)
+🇰🇷 KOSPI 전망
+(오늘 한국 증시 예상 방향과 근거 1-2문장)
 
-💹 매크로 지표
-• 달러인덱스: (수치) (등락)
-• 원/달러: (수치) (등락)
-• 국제유가: (수치) (등락)
-• 10년물 금리: (수치) (등락)
-
-⚠️ 작성 원칙:
-- 이모지와 가독성 최우선
-- 한글만 사용 (영어 표기 최소화)
-- 결과물만 출력 (추가 설명 없이)
-- 불필요한 인사말 없이 바로 시작
+⚠️ 규칙:
+- 위 양식만 출력 (다른 내용 절대 금지)
+- 숫자/지수/환율 언급 금지 (별도 제공됨)
+- 한글만 사용
+- 인사말 없이 바로 시작
 
 ---
 [시황 데이터]
 {market_data}
 """
 
-        # 프롬프트 템플릿 (상세 버전)
-        self.detailed_prompt_template = """당신은 신한투자증권 서울금융센터 황인철 PB의 '전용 시황 비서'입니다.
-아래 시황 데이터를 바탕으로 고객에게 발송할 아침 시황 요약을 작성해주세요.
-
-📌 양식 (반드시 준수):
-
-📊 핵심 요약
-- (첫 번째 핵심 이슈)
-- (두 번째 핵심 이슈)
-- (세 번째 핵심 이슈)
-
-📝 핵심 내용
-• 시장 총평: (2-3문장으로 오늘 시장 요약)
-• 주요 종목: (움직임이 컸던 종목들)
-• 투자 심리: (공포/탐욕 지수, 시장 분위기)
-
-📈 주요 지수
-• 다우: (종가) (등락률%)
-• 나스닥: (종가) (등락률%)
-• S&P 500: (종가) (등락률%)
-• 러셀 2000: (종가) (등락률%)
-• KOSPI 예상: (방향성 및 근거)
-
-💹 매크로 지표
-• 달러인덱스: (수치) (등락)
-• 원/달러: (수치) (등락)
-• 국제유가(WTI): (수치) (등락)
-• 금: (수치) (등락)
-• 10년물 금리: (수치) (등락)
-• VIX: (수치) (등락)
-
-💡 오늘의 키워드
-(시장을 움직인 핵심 키워드 2-3개와 간단한 설명)
-
-⚠️ 작성 원칙:
-- 이모지와 가독성 최우선
-- 한글만 사용 (영어 표기 최소화)
-- 결과물만 출력 (추가 설명 없이)
-- 불필요한 인사말 없이 바로 시작
-
----
-[시황 데이터]
-{market_data}
-"""
-
-    def summarize(self, market_data: str, use_detailed: bool = False) -> Optional[str]:
+    def summarize(self, market_data: str, market_quotes: Optional[Dict] = None, use_detailed: bool = False) -> Optional[str]:
         """
-        시황 데이터 요약
+        시황 데이터 요약 (Yahoo 지수는 고정 삽입)
 
         Args:
             market_data: 수집된 시황 데이터
+            market_quotes: Yahoo Finance에서 가져온 지수 데이터
             use_detailed: 상세 요약 사용 여부
 
         Returns:
@@ -118,50 +65,104 @@ class GeminiSummarizer:
             logger.error("요약할 데이터가 없음")
             return None
 
-        # 프롬프트 선택
-        template = self.detailed_prompt_template if use_detailed else self.prompt_template
-        prompt = template.format(market_data=market_data)
+        # Gemini로 핵심 요약만 생성
+        prompt = self.analysis_prompt.format(market_data=market_data)
+        analysis = None
 
-        # 재시도 로직
         for attempt in range(1, self.max_retries + 1):
             try:
                 logger.info(f"Gemini API 요약 시도 {attempt}/{self.max_retries}")
-
                 response = self.model.generate_content(prompt)
 
                 if response and response.text:
-                    summary = response.text.strip()
-
-                    # 응답 검증 (너무 짧으면 재시도)
-                    if len(summary) < 100:
-                        logger.warning(f"응답이 너무 짧음 ({len(summary)} 글자), 재시도...")
-                        time.sleep(self.retry_delay * attempt)
-                        continue
-
-                    logger.info(f"요약 생성 성공: {len(summary)} 글자")
-                    return summary
-                else:
-                    logger.warning("Gemini API 응답이 비어있음")
+                    analysis = response.text.strip()
+                    if len(analysis) >= 50:
+                        logger.info(f"분석 생성 성공: {len(analysis)} 글자")
+                        break
+                    logger.warning(f"응답이 너무 짧음 ({len(analysis)} 글자)")
 
             except Exception as e:
                 logger.error(f"Gemini API 호출 실패 (시도 {attempt}): {e}")
 
-            # 재시도 전 대기 (지수 백오프)
             if attempt < self.max_retries:
-                wait_time = self.retry_delay * attempt
-                logger.info(f"{wait_time}초 후 재시도...")
-                time.sleep(wait_time)
+                time.sleep(self.retry_delay * attempt)
 
-        logger.error("모든 재시도 실패")
-        return None
+        if not analysis:
+            logger.error("분석 생성 실패")
+            return None
 
-    def summarize_simple(self, market_data: str) -> Optional[str]:
+        # Yahoo 지수 데이터가 있으면 고정 포맷으로 조합
+        if market_quotes:
+            summary = self._build_final_summary(analysis, market_quotes, use_detailed)
+        else:
+            summary = analysis
+
+        return summary
+
+    def _build_final_summary(self, analysis: str, quotes: Dict, use_detailed: bool) -> str:
+        """분석 결과와 Yahoo 지수를 조합하여 최종 요약 생성"""
+
+        def fmt(symbol: str, is_rate: bool = False, is_krw: bool = False) -> str:
+            """지표 포맷팅"""
+            if symbol not in quotes:
+                return "N/A"
+            q = quotes[symbol]
+            price = q['price']
+            pct = q['change_pct']
+            direction = "▲" if pct >= 0 else "▼"
+
+            if is_rate:
+                return f"{price:.2f}% ({direction}{abs(pct):.2f}%)"
+            elif is_krw:
+                return f"{price:,.0f}원 ({direction}{abs(pct):.2f}%)"
+            elif price > 1000:
+                return f"{price:,.2f} ({direction}{abs(pct):.2f}%)"
+            else:
+                return f"{price:.2f} ({direction}{abs(pct):.2f}%)"
+
+        # 지수 섹션
+        index_section = f"""📈 주요 지수
+• 다우: {fmt('^DJI')}
+• S&P 500: {fmt('^GSPC')}
+• 나스닥: {fmt('^IXIC')}"""
+
+        if use_detailed:
+            index_section += f"\n• 러셀 2000: {fmt('^RUT')}"
+
+        # 매크로 섹션
+        def fmt_oil(symbol: str) -> str:
+            if symbol not in quotes:
+                return "N/A"
+            q = quotes[symbol]
+            direction = "▲" if q['change_pct'] >= 0 else "▼"
+            return f"${q['price']:.2f} ({direction}{abs(q['change_pct']):.2f}%)"
+
+        macro_section = f"""💹 매크로 지표
+• 달러인덱스: {fmt('DX-Y.NYB')}
+• 원/달러: {fmt('KRW=X', is_krw=True)}
+• WTI 유가: {fmt_oil('CL=F')}
+• 10년물 금리: {fmt('^TNX', is_rate=True)}"""
+
+        if use_detailed:
+            macro_section += f"\n• 금: {fmt('GC=F')}"
+            macro_section += f"\n• VIX: {fmt('^VIX')}"
+
+        # 최종 조합
+        final = f"""{analysis}
+
+{index_section}
+
+{macro_section}"""
+
+        return final
+
+    def summarize_simple(self, market_data: str, market_quotes: Optional[Dict] = None) -> Optional[str]:
         """간결한 요약 생성"""
-        return self.summarize(market_data, use_detailed=False)
+        return self.summarize(market_data, market_quotes, use_detailed=False)
 
-    def summarize_detailed(self, market_data: str) -> Optional[str]:
+    def summarize_detailed(self, market_data: str, market_quotes: Optional[Dict] = None) -> Optional[str]:
         """상세 요약 생성"""
-        return self.summarize(market_data, use_detailed=True)
+        return self.summarize(market_data, market_quotes, use_detailed=True)
 
 
 def test_gemini_summarizer():

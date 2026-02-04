@@ -20,7 +20,7 @@ import sys
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict, Tuple
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -53,9 +53,12 @@ def load_config():
     try:
         import config as config_module
         config_vars = [
-            'GEMINI_API_KEY', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_SEND_TO_CHAT_ID',
+            'LLM_PROVIDER', 'LLM_FALLBACK',
+            'DEEPSEEK_API_KEY', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL',
+            'GEMINI_API_KEY', 'GEMINI_MODEL',
+            'TELEGRAM_BOT_TOKEN', 'TELEGRAM_SEND_TO_CHAT_ID',
             'TELEGRAM_CHANNEL_USERNAME', 'BRIEFING_MARKET_WRAP_URL',
-            'USE_DETAILED_FORMAT', 'GEMINI_MODEL', 'LOG_LEVEL'
+            'USE_DETAILED_FORMAT', 'LOG_LEVEL'
         ]
         for var in config_vars:
             if hasattr(config_module, var):
@@ -66,6 +69,11 @@ def load_config():
 
     # 환경변수로 덮어쓰기 (우선)
     env_mappings = {
+        'LLM_PROVIDER': 'LLM_PROVIDER',
+        'LLM_FALLBACK': 'LLM_FALLBACK',
+        'DEEPSEEK_API_KEY': 'DEEPSEEK_API_KEY',
+        'OPENROUTER_API_KEY': 'OPENROUTER_API_KEY',
+        'OPENROUTER_MODEL': 'OPENROUTER_MODEL',
         'GEMINI_API_KEY': 'GEMINI_API_KEY',
         'TELEGRAM_BOT_TOKEN': 'TELEGRAM_BOT_TOKEN',
         'TELEGRAM_SEND_TO_CHAT_ID': 'TELEGRAM_SEND_TO_CHAT_ID',
@@ -76,7 +84,6 @@ def load_config():
     for config_key, env_key in env_mappings.items():
         env_value = os.getenv(env_key)
         if env_value:
-            # CHAT_ID는 숫자로 변환
             if config_key == 'TELEGRAM_SEND_TO_CHAT_ID':
                 try:
                     settings[config_key] = int(env_value)
@@ -86,8 +93,11 @@ def load_config():
                 settings[config_key] = env_value
 
     # 기본값 설정
+    settings.setdefault('LLM_PROVIDER', 'deepseek')
+    settings.setdefault('LLM_FALLBACK', 'openrouter')
+    settings.setdefault('OPENROUTER_MODEL', 'mistralai/mistral-small')
     settings.setdefault('USE_DETAILED_FORMAT', False)
-    settings.setdefault('GEMINI_MODEL', 'gemini-pro')
+    settings.setdefault('GEMINI_MODEL', 'gemini-1.5-flash')
     settings.setdefault('LOG_LEVEL', 'INFO')
 
     return settings
@@ -103,18 +113,37 @@ def validate_config(config: dict) -> bool:
     Returns:
         True if valid
     """
-    required = ['GEMINI_API_KEY', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_SEND_TO_CHAT_ID']
-    missing = [key for key in required if not config.get(key)]
+    # 텔레그램 필수
+    telegram_required = ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_SEND_TO_CHAT_ID']
+    missing = [key for key in telegram_required if not config.get(key)]
 
     if missing:
-        logger.error(f"필수 설정 누락: {', '.join(missing)}")
-        logger.error("config.py 또는 환경변수를 확인해주세요")
+        logger.error(f"텔레그램 설정 누락: {', '.join(missing)}")
+        return False
+
+    # LLM API 키 중 하나는 있어야 함
+    llm_keys = {
+        'DEEPSEEK_API_KEY': 'YOUR_DEEPSEEK_API_KEY',
+        'OPENROUTER_API_KEY': 'YOUR_OPENROUTER_API_KEY',
+        'GEMINI_API_KEY': 'YOUR_GEMINI_API_KEY'
+    }
+
+    has_valid_llm = False
+    for key, placeholder in llm_keys.items():
+        value = config.get(key)
+        if value and value != placeholder:
+            has_valid_llm = True
+            logger.info(f"LLM API 키 확인됨: {key}")
+            break
+
+    if not has_valid_llm:
+        logger.error("LLM API 키가 하나도 설정되지 않음 (DEEPSEEK/OPENROUTER/GEMINI 중 하나 필요)")
         return False
 
     return True
 
 
-def collect_market_data(config: dict) -> Optional[str]:
+def collect_market_data(config: dict) -> Tuple[Optional[str], Optional[Dict]]:
     """
     시황 데이터 수집
 
@@ -122,48 +151,50 @@ def collect_market_data(config: dict) -> Optional[str]:
         config: 설정 딕셔너리
 
     Returns:
-        수집된 시황 데이터 문자열
+        (수집된 시황 데이터 문자열, Yahoo 지수 딕셔너리)
     """
-    from collectors.briefing_collector import BriefingCollector
     from collectors.telegram_channel_collector import TelegramChannelCollector
+    from collectors.yahoo_market_collector import YahooMarketCollector
 
     collected_data = []
     sources = []
+    yahoo_quotes = None
 
-    # 1. Briefing.com 수집
-    briefing_url = config.get('BRIEFING_MARKET_WRAP_URL')
+    # 1. Yahoo Finance 실시간 지표 수집
     try:
-        logger.info("Briefing.com 시황 수집 시작...")
-        collector = BriefingCollector(market_wrap_url=briefing_url if briefing_url else None)
-        briefing_data = collector.get_market_wrap()
+        logger.info("Yahoo Finance 시장 데이터 수집 시작...")
+        collector = YahooMarketCollector()
+        yahoo_quotes = collector.get_all_quotes()  # 지수 데이터 별도 저장
+        yahoo_data = collector.get_market_summary()
 
-        if briefing_data:
-            collected_data.append("=== Briefing.com 마감시황 ===\n")
-            collected_data.append(briefing_data)
+        if yahoo_data:
+            collected_data.append(yahoo_data)
             collected_data.append("\n\n")
-            sources.append("Briefing.com")
-            logger.info(f"Briefing.com 수집 성공: {len(briefing_data)} 글자")
+            sources.append("Yahoo Finance")
+            logger.info(f"Yahoo Finance 수집 성공: {len(yahoo_quotes)}개 지표")
         else:
-            logger.warning("Briefing.com 수집 실패 또는 데이터 없음")
+            logger.warning("Yahoo Finance 수집 실패")
     except Exception as e:
-        logger.error(f"Briefing.com 수집 중 오류: {e}")
+        logger.error(f"Yahoo Finance 수집 중 오류: {e}")
 
-    # 2. 텔레그램 채널 수집
+    # 2. 텔레그램 채널 수집 (시황 관련 메시지)
     channel_username = config.get('TELEGRAM_CHANNEL_USERNAME')
     if channel_username:
         try:
             logger.info(f"텔레그램 채널 수집 시작: {channel_username}")
             collector = TelegramChannelCollector(channel_username)
 
-            # 최신 메시지 수집
-            telegram_data = collector.get_latest_message()
+            # 미국 시황 메시지만 필터링하여 수집
+            telegram_messages = collector.get_us_market_messages()
 
-            if telegram_data:
+            if telegram_messages:
                 collected_data.append(f"=== 텔레그램 채널 (@{channel_username}) ===\n")
-                collected_data.append(telegram_data)
-                collected_data.append("\n\n")
+                for i, msg in enumerate(telegram_messages[:5], 1):  # 최대 5개
+                    collected_data.append(f"\n[메시지 {i}]\n{msg}\n")
+                collected_data.append("\n")
                 sources.append(f"Telegram @{channel_username}")
-                logger.info(f"텔레그램 채널 수집 성공: {len(telegram_data)} 글자")
+                total_len = sum(len(m) for m in telegram_messages[:5])
+                logger.info(f"텔레그램 채널 수집 성공: {len(telegram_messages)}개 메시지, {total_len} 글자")
             else:
                 logger.warning("텔레그램 채널 수집 실패 또는 데이터 없음")
         except Exception as e:
@@ -171,48 +202,88 @@ def collect_market_data(config: dict) -> Optional[str]:
 
     if not collected_data:
         logger.error("수집된 시황 데이터가 없습니다")
-        return None
+        return None, None
 
     combined_data = ''.join(collected_data)
     logger.info(f"총 {len(combined_data)} 글자 수집됨 (소스: {', '.join(sources)})")
 
-    return combined_data
+    return combined_data, yahoo_quotes
 
 
-def summarize_market_data(market_data: str, config: dict) -> Optional[str]:
+def get_summarizer(provider: str, config: dict):
+    """LLM 프로바이더별 summarizer 인스턴스 반환"""
+    provider = provider.lower()
+
+    if provider == 'deepseek':
+        from processors.deepseek_summarizer import DeepSeekMarketSummarizer
+        api_key = config.get('DEEPSEEK_API_KEY')
+        if not api_key or api_key == 'YOUR_DEEPSEEK_API_KEY':
+            return None
+        return DeepSeekMarketSummarizer(api_key=api_key)
+
+    elif provider == 'openrouter':
+        from processors.deepseek_summarizer import OpenRouterMarketSummarizer
+        api_key = config.get('OPENROUTER_API_KEY')
+        if not api_key or api_key == 'YOUR_OPENROUTER_API_KEY':
+            return None
+        model = config.get('OPENROUTER_MODEL', 'mistralai/mistral-small')
+        return OpenRouterMarketSummarizer(api_key=api_key, model_name=model)
+
+    elif provider == 'gemini':
+        from processors.gemini_summarizer import GeminiSummarizer
+        api_key = config.get('GEMINI_API_KEY')
+        if not api_key or api_key == 'YOUR_GEMINI_API_KEY':
+            return None
+        model = config.get('GEMINI_MODEL', 'gemini-1.5-flash')
+        return GeminiSummarizer(api_key=api_key, model_name=model)
+
+    return None
+
+
+def summarize_market_data(market_data: str, yahoo_quotes: Optional[Dict], config: dict) -> Optional[str]:
     """
-    Gemini API로 시황 요약
+    LLM API로 시황 요약 (자동 fallback 지원)
 
     Args:
         market_data: 수집된 시황 데이터
+        yahoo_quotes: Yahoo Finance 지수 데이터
         config: 설정 딕셔너리
 
     Returns:
         요약된 텍스트
     """
-    from processors.gemini_summarizer import GeminiSummarizer
+    main_provider = config.get('LLM_PROVIDER', 'deepseek')
+    fallback_provider = config.get('LLM_FALLBACK', 'openrouter')
+    use_detailed = config.get('USE_DETAILED_FORMAT', False)
 
-    try:
-        logger.info("Gemini API 요약 시작...")
+    # 시도할 프로바이더 목록
+    providers_to_try = [main_provider]
+    if fallback_provider and fallback_provider != main_provider:
+        providers_to_try.append(fallback_provider)
 
-        summarizer = GeminiSummarizer(
-            api_key=config['GEMINI_API_KEY'],
-            model_name=config.get('GEMINI_MODEL', 'gemini-pro')
-        )
+    for provider in providers_to_try:
+        try:
+            logger.info(f"{provider} API 요약 시작...")
+            summarizer = get_summarizer(provider, config)
 
-        use_detailed = config.get('USE_DETAILED_FORMAT', False)
-        summary = summarizer.summarize(market_data, use_detailed=use_detailed)
+            if not summarizer:
+                logger.warning(f"{provider} API 키가 설정되지 않음, 건너뜀")
+                continue
 
-        if summary:
-            logger.info(f"요약 생성 성공: {len(summary)} 글자")
-            return summary
-        else:
-            logger.error("요약 생성 실패")
-            return None
+            summary = summarizer.summarize(market_data, market_quotes=yahoo_quotes, use_detailed=use_detailed)
 
-    except Exception as e:
-        logger.error(f"요약 생성 중 오류: {e}")
-        return None
+            if summary:
+                logger.info(f"요약 생성 성공 ({provider}): {len(summary)} 글자")
+                return summary
+            else:
+                logger.warning(f"{provider} 요약 실패, 다음 프로바이더 시도")
+
+        except Exception as e:
+            logger.error(f"{provider} 요약 중 오류: {e}")
+            continue
+
+    logger.error("모든 LLM 프로바이더 실패")
+    return None
 
 
 def send_to_telegram(summary: str, config: dict) -> bool:
@@ -236,15 +307,7 @@ def send_to_telegram(summary: str, config: dict) -> bool:
             chat_id=str(config['TELEGRAM_SEND_TO_CHAT_ID'])
         )
 
-        # 소스 정보 생성
-        sources = []
-        if config.get('BRIEFING_MARKET_WRAP_URL'):
-            sources.append("Briefing.com")
-        if config.get('TELEGRAM_CHANNEL_USERNAME'):
-            sources.append(f"@{config['TELEGRAM_CHANNEL_USERNAME']}")
-        source_info = ", ".join(sources) if sources else None
-
-        success = sender.send_market_summary(summary, source_info=source_info)
+        success = sender.send_market_summary(summary)
 
         if success:
             logger.info("텔레그램 전송 성공")
@@ -314,7 +377,7 @@ def main():
 
     # 1단계: 시황 데이터 수집
     print("\n📊 1단계: 시황 데이터 수집 중...")
-    market_data = collect_market_data(config)
+    market_data, yahoo_quotes = collect_market_data(config)
 
     if not market_data:
         logger.error("시황 데이터 수집 실패")
@@ -325,7 +388,7 @@ def main():
 
     # 2단계: Gemini API 요약
     print("\n🤖 2단계: Gemini API 요약 중...")
-    summary = summarize_market_data(market_data, config)
+    summary = summarize_market_data(market_data, yahoo_quotes, config)
 
     if not summary:
         logger.error("요약 생성 실패")
@@ -333,6 +396,22 @@ def main():
         sys.exit(1)
 
     print(f"✅ 요약 생성 완료 ({len(summary)} 글자)")
+
+    # 3단계: 요약 검증
+    print("\n🔍 3단계: 요약 검증 중...")
+    if yahoo_quotes:
+        from processors.validator import validate_summary
+        is_valid, issues = validate_summary(summary, yahoo_quotes)
+
+        if is_valid:
+            print("✅ 검증 통과")
+        else:
+            print(f"⚠️ 검증 경고 ({len(issues)}개 문제 발견):")
+            for issue in issues[:5]:  # 최대 5개만 표시
+                print(f"  - {issue}")
+            logger.warning(f"검증 경고: {issues}")
+    else:
+        print("⏭️ Yahoo 데이터 없음, 검증 생략")
 
     # 요약 미리보기
     print("\n" + "-" * 40)
@@ -342,11 +421,11 @@ def main():
     print(preview)
     print("-" * 40)
 
-    # 3단계: 파일 저장
+    # 4단계: 파일 저장
     save_summary_to_file(summary, market_data)
 
-    # 4단계: 텔레그램 전송
-    print("\n📤 3단계: 텔레그램 전송 중...")
+    # 5단계: 텔레그램 전송
+    print("\n📤 4단계: 텔레그램 전송 중...")
     success = send_to_telegram(summary, config)
 
     if success:

@@ -1,5 +1,9 @@
 # 미국 마감시황 자동 전송 워크플로우
 #
+# 데이터 소스:
+#   - Yahoo Finance API: 실시간 지수/환율/원자재 데이터
+#   - 텔레그램 채널(@shmstory): 시황 분석 메시지
+#
 # 실행 시간 (한국시간 기준, 월-금):
 #   - 1차: 06:30 (UTC 21:30)
 #   - 2차: 06:40 (UTC 21:40) - 1차 실패 시
@@ -8,9 +12,6 @@
 # 필요한 Secrets:
 #   - GEMINI_API_KEY: Google AI Studio API 키
 #   - TELEGRAM_BOT_TOKEN: 텔레그램 봇 토큰
-#   - TELEGRAM_SEND_TO_CHAT_ID: 메시지 수신 채팅 ID
-#   - TELEGRAM_CHANNEL_USERNAME: (선택) 시황 수집 채널
-#   - BRIEFING_MARKET_WRAP_URL: (선택) Briefing.com URL
 
 name: 미국 마감시황 자동 전송
 
