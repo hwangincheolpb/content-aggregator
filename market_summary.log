@@ -241,3 +241,31 @@ message: "API key not valid. Please pass a valid API key."
 2026-02-03 08:47:42,195 - senders.telegram_sender - INFO - Telegram message(s) sent successfully to chat -1002524208934
 2026-02-03 08:47:42,196 - __main__ - INFO - 텔레그램 전송 성공
 2026-02-03 08:47:42,196 - __main__ - INFO - 시스템 정상 종료
+2026-02-04 21:35:50,514 - __main__ - INFO - 시스템 시작
+2026-02-04 21:35:50,515 - __main__ - INFO - LLM API 키 확인됨: DEEPSEEK_API_KEY
+2026-02-04 21:35:58,234 - __main__ - INFO - Yahoo Finance 시장 데이터 수집 시작...
+2026-02-04 21:36:03,046 - collectors.yahoo_market_collector - INFO - 총 11개 지표 조회 성공
+2026-02-04 21:36:03,816 - collectors.yahoo_market_collector - INFO - 총 11개 지표 조회 성공
+2026-02-04 21:36:03,816 - collectors.yahoo_market_collector - INFO - 시장 요약 생성 완료: 349 글자
+2026-02-04 21:36:03,817 - __main__ - INFO - Yahoo Finance 수집 성공: 11개 지표
+2026-02-04 21:36:03,817 - __main__ - INFO - 텔레그램 채널 수집 시작: shmstory
+2026-02-04 21:36:03,817 - collectors.telegram_channel_collector - INFO - 텔레그램 채널 최근 20개 메시지 수집 시작
+2026-02-04 21:36:05,248 - collectors.telegram_channel_collector - INFO - 최근 메시지 20개 수집됨
+2026-02-04 21:36:05,249 - collectors.telegram_channel_collector - INFO - US 시황 메시지 2개 필터링됨
+2026-02-04 21:36:05,250 - __main__ - INFO - 텔레그램 채널 수집 성공: 2개 메시지, 4165 글자
+2026-02-04 21:36:05,250 - __main__ - INFO - 총 4565 글자 수집됨 (소스: Yahoo Finance, Telegram @shmstory)
+2026-02-04 21:36:05,250 - __main__ - INFO - deepseek API 요약 시작...
+2026-02-04 21:36:05,278 - processors.deepseek_summarizer - INFO - DeepSeek API 호출 시도 1/3
+2026-02-04 21:36:27,893 - processors.deepseek_summarizer - INFO - 응답 성공: 866 글자
+2026-02-04 21:36:27,895 - processors.deepseek_summarizer - INFO - 1단계 초안 생성 완료: 866 글자
+2026-02-04 21:36:27,895 - processors.deepseek_summarizer - INFO - DeepSeek API 호출 시도 1/3
+2026-02-04 21:36:47,601 - processors.deepseek_summarizer - INFO - 응답 성공: 857 글자
+2026-02-04 21:36:47,603 - processors.deepseek_summarizer - INFO - 2단계 다듬기 완료: 857 글자
+2026-02-04 21:36:47,603 - __main__ - INFO - 요약 생성 성공 (deepseek): 1101 글자
+2026-02-04 21:36:47,605 - __main__ - INFO - 요약 저장: C:\dev\active-projects\content-aggregator\output\summary_20260204_213647.txt
+2026-02-04 21:36:47,606 - __main__ - INFO - 원본 데이터 저장: C:\dev\active-projects\content-aggregator\output\raw_20260204_213647.txt
+2026-02-04 21:36:47,627 - __main__ - INFO - 텔레그램 전송 시작...
+2026-02-04 21:36:52,588 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8308897604:AAHOfcSzxuXmC2FEvA9CNspVzAGj4MoyD7E/sendMessage "HTTP/1.1 200 OK"
+2026-02-04 21:36:53,098 - senders.telegram_sender - INFO - Telegram message(s) sent successfully to chat -1002524208934
+2026-02-04 21:36:53,099 - __main__ - INFO - 텔레그램 전송 성공
+2026-02-04 21:36:53,099 - __main__ - INFO - 시스템 정상 종료
