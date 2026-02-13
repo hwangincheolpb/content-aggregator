@@ -54,6 +54,7 @@ def load_config():
         import config as config_module
         config_vars = [
             'LLM_PROVIDER', 'LLM_FALLBACK',
+            'OLLAMA_MODEL', 'OLLAMA_API_URL',
             'DEEPSEEK_API_KEY', 'OPENROUTER_API_KEY', 'OPENROUTER_MODEL',
             'GEMINI_API_KEY', 'GEMINI_MODEL',
             'TELEGRAM_BOT_TOKEN', 'TELEGRAM_SEND_TO_CHAT_ID',
@@ -93,8 +94,10 @@ def load_config():
                 settings[config_key] = env_value
 
     # 기본값 설정
-    settings.setdefault('LLM_PROVIDER', 'deepseek')
-    settings.setdefault('LLM_FALLBACK', 'openrouter')
+    settings.setdefault('LLM_PROVIDER', 'ollama')
+    settings.setdefault('LLM_FALLBACK', 'deepseek')
+    settings.setdefault('OLLAMA_MODEL', 'qwen3:32b')
+    settings.setdefault('OLLAMA_API_URL', 'http://localhost:11434/api/chat')
     settings.setdefault('OPENROUTER_MODEL', 'mistralai/mistral-small')
     settings.setdefault('USE_DETAILED_FORMAT', False)
     settings.setdefault('GEMINI_MODEL', 'gemini-1.5-flash')
@@ -121,24 +124,28 @@ def validate_config(config: dict) -> bool:
         logger.error(f"텔레그램 설정 누락: {', '.join(missing)}")
         return False
 
-    # LLM API 키 중 하나는 있어야 함
-    llm_keys = {
-        'DEEPSEEK_API_KEY': 'YOUR_DEEPSEEK_API_KEY',
-        'OPENROUTER_API_KEY': 'YOUR_OPENROUTER_API_KEY',
-        'GEMINI_API_KEY': 'YOUR_GEMINI_API_KEY'
-    }
+    # LLM 설정 검증
+    provider = config.get('LLM_PROVIDER', 'ollama')
+    if provider == 'ollama':
+        logger.info("LLM: Ollama 로컬 모드 (API 키 불필요)")
+    else:
+        llm_keys = {
+            'DEEPSEEK_API_KEY': 'YOUR_DEEPSEEK_API_KEY',
+            'OPENROUTER_API_KEY': 'YOUR_OPENROUTER_API_KEY',
+            'GEMINI_API_KEY': 'YOUR_GEMINI_API_KEY'
+        }
 
-    has_valid_llm = False
-    for key, placeholder in llm_keys.items():
-        value = config.get(key)
-        if value and value != placeholder:
-            has_valid_llm = True
-            logger.info(f"LLM API 키 확인됨: {key}")
-            break
+        has_valid_llm = False
+        for key, placeholder in llm_keys.items():
+            value = config.get(key)
+            if value and value != placeholder:
+                has_valid_llm = True
+                logger.info(f"LLM API 키 확인됨: {key}")
+                break
 
-    if not has_valid_llm:
-        logger.error("LLM API 키가 하나도 설정되지 않음 (DEEPSEEK/OPENROUTER/GEMINI 중 하나 필요)")
-        return False
+        if not has_valid_llm:
+            logger.error("LLM API 키가 하나도 설정되지 않음 (DEEPSEEK/OPENROUTER/GEMINI 중 하나 필요)")
+            return False
 
     return True
 
@@ -214,7 +221,13 @@ def get_summarizer(provider: str, config: dict):
     """LLM 프로바이더별 summarizer 인스턴스 반환"""
     provider = provider.lower()
 
-    if provider == 'deepseek':
+    if provider == 'ollama':
+        from processors.ollama_summarizer import OllamaMarketSummarizer
+        model = config.get('OLLAMA_MODEL', 'qwen3:32b')
+        base_url = config.get('OLLAMA_API_URL', 'http://localhost:11434/api/chat')
+        return OllamaMarketSummarizer(model_name=model, base_url=base_url)
+
+    elif provider == 'deepseek':
         from processors.deepseek_summarizer import DeepSeekMarketSummarizer
         api_key = config.get('DEEPSEEK_API_KEY')
         if not api_key or api_key == 'YOUR_DEEPSEEK_API_KEY':
@@ -386,8 +399,9 @@ def main():
 
     print(f"✅ 시황 데이터 수집 완료 ({len(market_data)} 글자)")
 
-    # 2단계: Gemini API 요약
-    print("\n🤖 2단계: Gemini API 요약 중...")
+    # 2단계: LLM 요약
+    llm_name = config.get('LLM_PROVIDER', 'ollama').upper()
+    print(f"\n🤖 2단계: {llm_name} 요약 중...")
     summary = summarize_market_data(market_data, yahoo_quotes, config)
 
     if not summary:

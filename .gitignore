@@ -14,6 +14,7 @@ venv/
 # Data & Output (local only)
 data/
 output/
+logs/
 *.log
 *.json
 !.env.example
